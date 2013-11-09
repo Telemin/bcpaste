@@ -1,0 +1,310 @@
+#!/bin/bash
+#name           :bcpaste
+#description    :paste from file or stdin to pastebin.com
+#author         :telemin
+#email          :phil.tooley@gmail.com
+#date           :20131109
+#version        :0.1
+#usage          :bcpaste [-uprefghFa] title [filename]
+#notes          :requires (ba)sh gnu getopt and curl
+################################################################
+
+#You will need to specify your own api token here
+DEV_API_TOKEN="28c4e0dd4dbae2ae9b1e851e15b13dbc"
+
+#This could possibly change at some point...
+PASTE_API_URL="http://pastebin.com/api/api_post.php"
+LOGIN_API_URL="http://pastebin.com/api/api_login.php"
+
+usage(){
+  cat << EOF
+Usage: $0 [options] title [filename]
+
+  title           set the title of your paste
+  filename        filename of the file to paste, if not given
+                  $0 will read from stdin
+
+Options:
+  
+  -u,--unlisted   default: make unlisted paste (conflicts with -p,-r)
+  -p,--public     make public paste (conflicts with -u,-r)
+  -r,--private    make private paste (conflicts with -u,-p,-g)
+
+  -e,--expiry=    set expiry time [10M,1H,1D,1W,2W,1M,N]
+                  (default N(ever))
+
+  -f,--format=    set format for syntax highlighting, see the 
+                  man page, script or pastebin for list, by
+
+  -g,--guest      paste as a guest, does not require an auth
+                  token to be generated
+
+  -h,--help       show this help
+
+  -F,--formats    list available syntax highlighting formats
+
+  -a,--auth       authenticate with pastebin.com to generate
+                  your user api key, stored at ~/.bcpaste_auth
+                  once done, pastes will be made as that user
+EOF
+}
+
+function gen_auth_token(){
+  cat <<EOF
+Please be aware that unless you are a pastebin pro member,
+SSL is not available, even for login transactions. So if
+you continue here, your password will be transmitted in 
+the clear.
+
+You may well be okay with this, but the author suggests 
+that you don't use your pastebin account password with
+any other service.
+
+EOF
+  local IAGREE=""
+  while [ -z "$IAGREE" ]; do
+    read -p "I understand and wish to continue[Yes/No]: " IAGREE
+    if [ "$IAGREE" == "Yes" ]; then
+      break
+    elif [ "$IAGREE" == "No" ]; then
+      echo "Don't forget you can still paste as a guest with -g"
+      exit 0
+    else
+      echo "Please answer Yes or No"
+      IAGREE=""
+    fi
+  done
+  local PB_USER
+  local PB_PASSWD
+  read -p "Please enter your pastebin username: " PB_USER
+  read -s -p "And your pastebin password: " PB_PASSWD
+  echo ""
+
+  local CURL_DATA="--data-urlencode api_dev_key=$DEV_API_TOKEN "
+  CURL_DATA+="--data-urlencode api_user_name=$PB_USER "
+  CURL_DATA+="--data-urlencode api_user_password=$PB_PASSWD "
+
+  local CURL_OUTPUT=$(curl --silent $CURL_DATA $LOGIN_API_URL)
+  if [[ "$CURL_OUTPUT" =~ ^[0-9a-f]*$ ]] && [[ ${#CURL_OUTPUT} -eq 32 ]]; then
+    echo "Retrieved auth token: ${CURL_OUTPUT}"
+  else
+    echo "Problem: ${CURL_OUTPUT}"
+    exit 1
+  fi
+  echo ${CURL_OUTPUT} > "$HOME/.bcpaste_auth"
+  if [ $? -eq 0 ] && [ -e "$HOME/.bcpaste_auth" ]; then
+    echo "Stored key in ${HOME}/.bcpaste_auth"
+  else
+    echo "Problem writing to file, check your permissions maybe?"
+  fi
+}
+
+function read_auth_token(){
+  local auth_api_token
+  auth_api_token=$(cat $HOME/.bcpaste_auth 2>/dev/null)
+  if [ $? != 0 ]; then
+    echo "NULL"
+    return 1
+  fi
+  echo "$auth_api_token"
+  return 0
+}
+
+function formats(){
+  echo "Not yet implemented, sorry!"
+}
+
+function is_in_array(){
+### $1 search member, $2 array
+  local searcharg="$1"
+  local array="$2[@]"
+  local isin=1
+  for element in "${!array}"; do
+    if [ "$searcharg" == "$element" ]; then
+      isin=0
+    fi
+  done;
+  return $isin;
+}  
+
+
+##########Script execution starts here##########
+
+AUTH_API_TOKEN=
+EXPIRY_OPTS=(10M 1H 1D 1W 2W 1M N)i
+FORMAT_OPTS=(c python)
+PRIVACY=1   #api takes values 0 (public), 1 (unlisted), 2 (private)
+EXPIRY="1W"
+FORMAT=
+NUM_POSITIONAL=0
+PASTETITLE=
+FILENAME=
+INPUTMODE=
+GUESTMODE=NO
+
+GETOPT_TEST=$(getopt -T)
+
+if [ $? != 4 ]; then
+  echo "Problem with getopt:"
+  echo $GETOPT_TEST
+  echo "This scripts needs gnu getopt (from util-linux package)"
+fi
+
+#Read in command line arguments
+GETOPT_TEMP=$(getopt --options hFaupre:f:g --longoptions \
+  "help,formats,auth,unlisted,public,private,expiry:,format:guest" --name "$0" -- "$@")
+
+#Die if getopt failed horribly
+if [ $? != 0 ]; then
+  exit 1
+fi
+
+#Check that curl exists and runs
+if [ -z "$(which curl)" ]; then
+  echo "curl does not appear to be in \$PATH, please check and try again"
+fi
+
+eval set -- "$GETOPT_TEMP"
+
+
+###Handle option parameters
+
+while true; do
+  case $1 in
+    -h|--help)
+      usage
+      exit 0 ;;
+    -F|--formats)
+      formats
+      exit 0 ;;
+    -a|--auth)
+      gen_auth_token
+      exit 0 ;;
+    -p|--public)
+      PRIVACY="public"
+      shift ;;
+    -u|--unlisted)
+      PRIVACY="unlisted"
+      shift ;;
+    -r|--private)
+      PRIVACY="private"
+      shift ;;
+    -e|--expiry)
+      if is_in_array $2 EXPIRY_OPTS; then
+        EXPIRY="$2"
+        shift 2
+      else
+       echo "Invalid expiry option: $2"
+       exit 1
+      fi ;;
+    -f|--format)
+      if is_in_array $2 FORMAT_OPTS; then
+        FORMAT="$2"
+        shift 2
+      else
+        echo "Unknown format option: $2"
+        exit 1
+      fi ;;
+    -g|--guest)
+      GUESTMODE="YES"
+      shift ;;
+    --)
+      shift 
+      break;;
+    *)
+      echo "Unexpected argument $1"
+      exit 1 ;;
+  esac
+done
+
+
+###Check and deal with positional arguments###
+
+if [ "$#" -lt "1" ]; then
+  echo "Missing mandatory parameter: title"
+  exit 1
+elif [ $# -eq 1 ]; then
+  PASTETITLE="$1"
+  INPUTMODE="STDIN"
+elif [ $# -eq 2 ]; then
+  PASTETITLE="$1"
+  INPUTMODE="FILE"
+  FILENAME="$2"
+else
+  echo "Too many parameters given: $@"
+  exit 1
+fi
+
+
+###Check for an auth token if necessary###
+
+if [ "$GUESTMODE" != "YES" ]; then
+  AUTHTOKEN=$(read_auth_token)
+  if [ $? != 0 ]; then
+    cat << EOF
+Failed to read api auth token from file.
+
+You can either create one using the -a option,
+or post as a guest using the -g option.
+EOF
+    exit 1
+  fi
+fi
+
+
+###Check not trying to post private as guest###
+
+if [ "$GUESTMODE" == "YES" ] && [ "$PRIVACY" == 2 ]; then
+  echo "Cannot make a private post as a guest!"
+  echo "Making an unlisted post instead..."
+  PRIVACY=1
+fi
+
+
+###Build the curl --data-urlencode command###
+
+#These we can just do
+CURL_DATA="--data-urlencode api_option=paste "
+CURL_DATA+="--data-urlencode api_dev_key=${DEV_API_TOKEN} "
+CURL_DATA+="--data-urlencode api_paste_private=$PRIVACY "
+CURL_DATA+="--data-urlencode api_paste_name=$PASTETITLE "
+CURL_DATA+="--data-urlencode api_paste_expire_date=$EXPIRY "
+
+#Are we specifying a format?
+if [ -n "$FORMAT" ]; then
+  CURL_DATA+="--data-urlencode api_paste_format=$FORMAT "
+fi
+
+#Are we sending a user key?
+if [ -n "$AUTH_API_TOKEN" ]; then
+  CURL_DATA+="api_user_key=$AUTH_API_TOKEN "
+fi
+
+#Now the paste itself, either a file, or stdin
+if [ $INPUTMODE == "FILE" ]; then
+  if [ -e "$FILENAME" ]; then
+    CURL_DATA+="--data-urlencode api_paste_code@$FILENAME "
+  else
+    echo "File ${FILENAME} cannot be accessed"
+    exit 1
+  fi
+else
+  CURL_DATA+="--data-urlencode api_paste_code@- "
+fi
+
+
+###Now we have everything set, do the paste###
+
+
+CURL_RESPONSE=$(curl --silent $CURL_DATA $PASTE_API_URL)
+
+if [[ ${CURL_RESPONSE} =~ ^http://pastebin.com/.* ]];then
+  echo ${CURL_RESPONSE}
+  exit 0
+else
+  cat <<EOF
+Error:
+$CURL_RESPONSE
+EOF
+  exit 1
+fi
