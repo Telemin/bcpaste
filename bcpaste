@@ -10,7 +10,7 @@
 ################################################################
 
 #You will need to specify your own api token here
-#DEV_API_TOKEN=""
+#PASTEBIN_API_DEV_TOKEN=""
 
 #This could possibly change at some point...
 PASTE_API_URL="http://pastebin.com/api/api_post.php"
@@ -80,7 +80,7 @@ EOF
   read -s -p "And your pastebin password: " PB_PASSWD
   echo ""
 
-  local CURL_DATA="--data-urlencode api_dev_key=$DEV_API_TOKEN "
+  local CURL_DATA="--data-urlencode api_dev_key=$PASTEBIN_API_DEV_TOKEN "
   CURL_DATA+="--data-urlencode api_user_name=$PB_USER "
   CURL_DATA+="--data-urlencode api_user_password=$PB_PASSWD "
 
@@ -100,13 +100,13 @@ EOF
 }
 
 function read_auth_token(){
-  local auth_api_token
-  auth_api_token=$(cat $HOME/.bcpaste_auth 2>/dev/null)
+  local api_auth_token
+  api_auth_token=$(cat $HOME/.bcpaste_auth 2>/dev/null)
   if [ $? != 0 ]; then
     echo "NULL"
     return 1
   fi
-  echo "$auth_api_token"
+  echo "$api_auth_token"
   return 0
 }
 
@@ -130,7 +130,7 @@ function is_in_array(){
 
 ##########Script execution starts here##########
 
-AUTH_API_TOKEN=
+PASTEBIN_API_AUTH_TOKEN=
 EXPIRY_OPTS=(10M 1H 1D 1W 2W 1M N)i
 FORMAT_OPTS=(c python)
 PRIVACY=1   #api takes values 0 (public), 1 (unlisted), 2 (private)
@@ -265,7 +265,7 @@ fi
 
 #These we can just do
 CURL_DATA="--data-urlencode api_option=paste "
-CURL_DATA+="--data-urlencode api_dev_key=${DEV_API_TOKEN} "
+CURL_DATA+="--data-urlencode api_dev_key=${PASTEBIN_API_DEV_TOKEN} "
 CURL_DATA+="--data-urlencode api_paste_private=$PRIVACY "
 CURL_DATA+="--data-urlencode api_paste_name=$PASTETITLE "
 CURL_DATA+="--data-urlencode api_paste_expire_date=$EXPIRY "
@@ -276,8 +276,8 @@ if [ -n "$FORMAT" ]; then
 fi
 
 #Are we sending a user key?
-if [ -n "$AUTH_API_TOKEN" ]; then
-  CURL_DATA+="api_user_key=$AUTH_API_TOKEN "
+if [ -n "$PASTEBIN_API_AUTH_TOKEN" ]; then
+  CURL_DATA+="api_user_key=$PASTEBIN_API_AUTH_TOKEN "
 fi
 
 #Now the paste itself, either a file, or stdin
