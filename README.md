@@ -1,6 +1,8 @@
 bcpaste
 =======
 
+This code is licensed under the MIT License
+
 A bash and curl script for pastebin. 
 This script implements all paste functions specified in the official api
 documented at http://pastebin.com/api
