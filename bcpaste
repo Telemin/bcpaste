@@ -303,7 +303,7 @@ if [[ ${CURL_RESPONSE} =~ ^http://pastebin.com/.* ]];then
   exit 0
 else
   cat <<EOF
-Error:
+Error, server responds:
 $CURL_RESPONSE
 EOF
   exit 1
