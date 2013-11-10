@@ -7,6 +7,7 @@
 #version        :0.1
 #usage          :bcpaste [-uprefghFa] title [filename]
 #notes          :requires (ba)sh gnu getopt and curl
+#license        :MIT License (see LICENSE file)
 ################################################################
 
 #You will need to specify your own api token here
