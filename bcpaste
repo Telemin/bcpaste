@@ -10,7 +10,7 @@
 ################################################################
 
 #You will need to specify your own api token here
-DEV_API_TOKEN="28c4e0dd4dbae2ae9b1e851e15b13dbc"
+#DEV_API_TOKEN=""
 
 #This could possibly change at some point...
 PASTE_API_URL="http://pastebin.com/api/api_post.php"
