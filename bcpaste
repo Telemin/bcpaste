@@ -17,6 +17,9 @@
 PASTE_API_URL="http://pastebin.com/api/api_post.php"
 LOGIN_API_URL="http://pastebin.com/api/api_login.php"
 
+BCPASTE_AUTH="$HOME/.config/bcpaste_auth"
+BCPASTE_DEV="$HOME/.config/bcpaste_dev"
+
 usage(){
   cat << EOF
 Usage: $0 [options] title [filename]
@@ -92,17 +95,28 @@ EOF
     echo "Problem: ${CURL_OUTPUT}"
     exit 1
   fi
-  echo ${CURL_OUTPUT} > "$HOME/.bcpaste_auth"
-  if [ $? -eq 0 ] && [ -e "$HOME/.bcpaste_auth" ]; then
-    echo "Stored key in ${HOME}/.bcpaste_auth"
+  echo ${CURL_OUTPUT} > "$BCPASTE_AUTH"
+  if [ $? -eq 0 ] && [ -e "$BCPASTE_AUTH" ]; then
+    echo "Stored key in $BCPASTE_AUTH"
   else
     echo "Problem writing to file, check your permissions maybe?"
   fi
 }
 
+function read_dev_token(){
+  local api_auth_token
+  api_dev_token=$(cat $BCPASTE_DEV 2>/dev/null)
+  if [ $? != 0 ]; then
+    echo "NULL"
+    return 1
+  fi
+  echo "$api_dev_token"
+  return 0
+}
+
 function read_auth_token(){
   local api_auth_token
-  api_auth_token=$(cat $HOME/.bcpaste_auth 2>/dev/null)
+  api_auth_token=$(cat $BCPASTE_AUTH 2>/dev/null)
   if [ $? != 0 ]; then
     echo "NULL"
     return 1
@@ -132,10 +146,10 @@ function is_in_array(){
 ##########Script execution starts here##########
 
 PASTEBIN_API_AUTH_TOKEN=
-EXPIRY_OPTS=(10M 1H 1D 1W 2W 1M N)i
+EXPIRY_OPTS=(10M 1H 1D 1W 2W 1M N)
 FORMAT_OPTS=(c python)
-PRIVACY=1   #api takes values 0 (public), 1 (unlisted), 2 (private)
-EXPIRY="1W"
+PRIVACY=2   #api takes values 0 (public), 1 (unlisted), 2 (private)
+EXPIRY="N"
 FORMAT=
 NUM_POSITIONAL=0
 PASTETITLE=
@@ -167,6 +181,18 @@ fi
 
 eval set -- "$GETOPT_TEMP"
 
+#Check for a valid API key
+PASTEBIN_API_DEV_TOKEN=$(read_dev_token)
+if [ $? != 0 ]; then
+  cat << EOF
+Failed to read api dev token from file.
+Please ensure there is a valid dev token at
+${BCPASTE_DEV}
+EOF
+  exit 1
+fi
+
+
 
 ###Handle option parameters
 
@@ -182,13 +208,13 @@ while true; do
       gen_auth_token
       exit 0 ;;
     -p|--public)
-      PRIVACY="public"
+      PRIVACY=0
       shift ;;
     -u|--unlisted)
-      PRIVACY="unlisted"
+      PRIVACY=1
       shift ;;
     -r|--private)
-      PRIVACY="private"
+      PRIVACY=2
       shift ;;
     -e|--expiry)
       if is_in_array $2 EXPIRY_OPTS; then
@@ -240,7 +266,7 @@ fi
 ###Check for an auth token if necessary###
 
 if [ "$GUESTMODE" != "YES" ]; then
-  AUTHTOKEN=$(read_auth_token)
+  PASTEBIN_API_AUTH_TOKEN=$(read_auth_token)
   if [ $? != 0 ]; then
     cat << EOF
 Failed to read api auth token from file.
@@ -278,7 +304,7 @@ fi
 
 #Are we sending a user key?
 if [ -n "$PASTEBIN_API_AUTH_TOKEN" ]; then
-  CURL_DATA+="api_user_key=$PASTEBIN_API_AUTH_TOKEN "
+  CURL_DATA+="--data-urlencode api_user_key=$PASTEBIN_API_AUTH_TOKEN "
 fi
 
 #Now the paste itself, either a file, or stdin
